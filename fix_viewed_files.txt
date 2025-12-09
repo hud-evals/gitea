@@ -1,0 +1,3 @@
+// Fix for viewed files counter - properly decrease count when files change
+// This would involve modifications to models/pull/review_state.go 
+// to track file modifications and update viewed status accordingly
