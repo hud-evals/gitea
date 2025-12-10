@@ -442,6 +442,15 @@ func UpdateBranch(ctx *context.APIContext) {
 	}
 
 	msg, err := repo_service.RenameBranch(ctx, repo, ctx.Doer, ctx.Repo.GitRepo, oldName, opt.Name)
+	// Check for permission/protection messages first (these also set err)
+	if msg == "insufficient_permission" {
+		ctx.Error(http.StatusForbidden, "", "User must be a repo or site admin to rename default or protected branches.")
+		return
+	}
+	if msg == "protected_glob" {
+		ctx.Error(http.StatusForbidden, "", "Branch is protected by glob-based protection rules.")
+		return
+	}
 	if err != nil {
 		ctx.Error(http.StatusInternalServerError, "RenameBranch", err)
 		return

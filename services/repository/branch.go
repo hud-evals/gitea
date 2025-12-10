@@ -416,6 +416,38 @@ func RenameBranch(ctx context.Context, repo *repo_model.Repository, doer *user_m
 		return "from_not_exist", nil
 	}
 
+	// Check if user has admin permission
+	perm, err := access_model.GetUserRepoPermission(ctx, repo, doer)
+	if err != nil {
+		return "", err
+	}
+
+	// Check if renaming default branch - requires admin
+	isDefault := from == repo.DefaultBranch
+	if isDefault && !perm.IsAdmin() {
+		return "insufficient_permission", fmt.Errorf("User must be a repo or site admin to rename default or protected branches.")
+	}
+
+	// Check if branch is protected - requires admin
+	isProtected, err := git_model.IsBranchProtected(ctx, repo.ID, from)
+	if err != nil {
+		return "", err
+	}
+	if isProtected && !perm.IsAdmin() {
+		return "insufficient_permission", fmt.Errorf("User must be a repo or site admin to rename default or protected branches.")
+	}
+
+	// Check if branch matches glob-based protection rules - no one can rename
+	rules, err := git_model.FindRepoProtectedBranchRules(ctx, repo.ID)
+	if err != nil {
+		return "", err
+	}
+	for _, rule := range rules {
+		if rule.Match(from) {
+			return "protected_glob", fmt.Errorf("Branch is protected by glob-based protection rules.")
+		}
+	}
+
 	if err := git_model.RenameBranch(ctx, repo, from, to, func(ctx context.Context, isDefault bool) error {
 		err2 := gitRepo.RenameBranch(from, to)
 		if err2 != nil {
