@@ -14,7 +14,6 @@ import (
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	webhook_module "code.gitea.io/gitea/modules/webhook"
-	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
 )
