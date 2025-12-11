@@ -4,12 +4,13 @@
 package integration
 
 import (
+    "context"
 	"fmt"
 	"net/http"
 	"testing"
 
 	"code.gitea.io/gitea/models/auth"
-	"code.gitea.io/gitea/models/db"
+	
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/structs"
@@ -34,17 +35,17 @@ func TestAdminRenameNonLocalUsers(t *testing.T) {
 			LoginType: auth.OAuth2,
 			LoginName: "oauth2-login",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 		defer func() {
 			unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "oauth2renamed"})
 		}()
 
 		// Admin should be able to rename this user
-		err := user.RenameUser(db.DefaultContext, oauth2User, "oauth2renamed", admin)
+		err := user.RenameUser(context.TODO(), oauth2User, "oauth2renamed", admin)
 		assert.NoError(t, err, "Admin should be able to rename OAuth2 users")
 
 		// Verify the rename worked
-		renamed, err := user_model.GetUserByName(db.DefaultContext, "oauth2renamed")
+		renamed, err := user_model.GetUserByName(context.TODO(), "oauth2renamed")
 		assert.NoError(t, err)
 		assert.Equal(t, oauth2User.ID, renamed.ID)
 	})
@@ -57,14 +58,14 @@ func TestAdminRenameNonLocalUsers(t *testing.T) {
 			LoginType: auth.LDAP,
 			LoginName: "ldap-login",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, ldapUser))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), ldapUser, nil))
 
 		// Admin should be able to rename this user
-		err := user.RenameUser(db.DefaultContext, ldapUser, "ldaprenamed", admin)
+		err := user.RenameUser(context.TODO(), ldapUser, "ldaprenamed", admin)
 		assert.NoError(t, err, "Admin should be able to rename LDAP users")
 
 		// Verify the rename worked
-		renamed, err := user_model.GetUserByName(db.DefaultContext, "ldaprenamed")
+		renamed, err := user_model.GetUserByName(context.TODO(), "ldaprenamed")
 		assert.NoError(t, err)
 		assert.Equal(t, ldapUser.ID, renamed.ID)
 	})
@@ -77,10 +78,10 @@ func TestAdminRenameNonLocalUsers(t *testing.T) {
 			LoginType: auth.OAuth2,
 			LoginName: "oauth2-login-2",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		// Normal user should NOT be able to rename this user
-		err := user.RenameUser(db.DefaultContext, oauth2User, "should-fail", normalUser)
+		err := user.RenameUser(context.TODO(), oauth2User, "should-fail", normalUser)
 		assert.Error(t, err, "Non-admin should not be able to rename OAuth2 users")
 	})
 
@@ -93,10 +94,10 @@ func TestAdminRenameNonLocalUsers(t *testing.T) {
 			LoginName: "oauth2-self-login",
 			IsAdmin:   false,
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		// User trying to rename themselves (non-admin)
-		err := user.RenameUser(db.DefaultContext, oauth2User, "oauth2newname", oauth2User)
+		err := user.RenameUser(context.TODO(), oauth2User, "oauth2newname", oauth2User)
 		assert.Error(t, err, "Non-admin OAuth2 user should not be able to rename themselves")
 	})
 
@@ -108,10 +109,10 @@ func TestAdminRenameNonLocalUsers(t *testing.T) {
 			LoginType: auth.Plain,
 			Passwd:    "password",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, localUser))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), localUser, nil))
 
 		// Admin should still be able to rename local users
-		err := user.RenameUser(db.DefaultContext, localUser, "localrenamed", admin)
+		err := user.RenameUser(context.TODO(), localUser, "localrenamed", admin)
 		assert.NoError(t, err, "Admin should be able to rename local users")
 	})
 }
@@ -130,7 +131,7 @@ func TestAdminRenameNonLocalUsersAPI(t *testing.T) {
 			LoginType: auth.OAuth2,
 			LoginName: "oauth2-api-login",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		// Try to rename via admin API
 		req := NewRequestWithJSON(t, "PATCH", fmt.Sprintf("/api/v1/admin/users/%s", oauth2User.Name), &structs.EditUserOption{
@@ -152,7 +153,7 @@ func TestAdminRenameNonLocalUsersAPI(t *testing.T) {
 			LoginType: auth.LDAP,
 			LoginName: "ldap-api-login",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, ldapUser))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), ldapUser, nil))
 
 		// Rename via admin API
 		req := NewRequestWithJSON(t, "PATCH", fmt.Sprintf("/api/v1/admin/users/%s", ldapUser.Name), &structs.EditUserOption{
@@ -180,7 +181,7 @@ func TestAdminRenameNonLocalUsersWeb(t *testing.T) {
 			LoginType: auth.OAuth2,
 			LoginName: "oauth2-web-login",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		// Access admin edit page
 		req := NewRequest(t, "GET", fmt.Sprintf("/admin/users/%d", oauth2User.ID))
@@ -202,7 +203,7 @@ func TestAdminRenameNonLocalUsersWeb(t *testing.T) {
 			LoginType: auth.OAuth2,
 			LoginName: "oauth2-web-login-2",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		csrf := GetUserCSRFToken(t, session)
 		
@@ -215,7 +216,7 @@ func TestAdminRenameNonLocalUsersWeb(t *testing.T) {
 		session.MakeRequest(t, req, http.StatusSeeOther)
 
 		// Verify rename worked
-		renamed, err := user_model.GetUserByName(db.DefaultContext, "oauth2webrenamed")
+		renamed, err := user_model.GetUserByName(context.TODO(), "oauth2webrenamed")
 		assert.NoError(t, err)
 		assert.Equal(t, oauth2User.ID, renamed.ID)
 	})
@@ -234,18 +235,18 @@ func TestAdminRenameNonLocalUsersPermissions(t *testing.T) {
 			LoginType: auth.OAuth2,
 			LoginName: "oauth2-perm-login",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		// Admin can rename
-		err := user.RenameUser(db.DefaultContext, oauth2User, "adminrenamed", admin)
+		err := user.RenameUser(context.TODO(), oauth2User, "adminrenamed", admin)
 		assert.NoError(t, err)
 
 		// Reset name
 		oauth2User.Name = "oauth2permtest"
-		assert.NoError(t, user_model.UpdateUserCols(db.DefaultContext, oauth2User, "name"))
+		assert.NoError(t, user_model.UpdateUserCols(context.TODO(), oauth2User, "name"))
 
 		// Normal user cannot rename
-		err = user.RenameUser(db.DefaultContext, oauth2User, "shouldfail", normalUser)
+		err = user.RenameUser(context.TODO(), oauth2User, "shouldfail", normalUser)
 		assert.Error(t, err)
 	})
 
@@ -257,10 +258,10 @@ func TestAdminRenameNonLocalUsersPermissions(t *testing.T) {
 			LoginType: auth.Plain,
 			Passwd:    "password",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, localUser))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), localUser, nil))
 
 		// Local user can rename themselves
-		err := user.RenameUser(db.DefaultContext, localUser, "localselfnew", localUser)
+		err := user.RenameUser(context.TODO(), localUser, "localselfnew", localUser)
 		// This should work (if allowed by other business logic)
 		// The fix is specifically about allowing ADMINS to rename non-local users
 		_ = err // Result depends on other business logic
@@ -290,11 +291,11 @@ func TestAdminRenameNonLocalUsersPermissions(t *testing.T) {
 				if ut.loginType == auth.Plain {
 					testUser.Passwd = "password"
 				}
-				assert.NoError(t, user_model.CreateUser(db.DefaultContext, testUser))
+				assert.NoError(t, user_model.CreateUser(context.TODO(), testUser, nil))
 
 				// Admin should be able to rename all types
 				newName := fmt.Sprintf("%s-renamed", ut.name)
-				err := user.RenameUser(db.DefaultContext, testUser, newName, admin)
+				err := user.RenameUser(context.TODO(), testUser, newName, admin)
 				assert.NoError(t, err, "Admin should be able to rename %s users", ut.loginType)
 			})
 		}
@@ -315,10 +316,10 @@ func TestAdminRenameNonLocalUsersEdgeCases(t *testing.T) {
 			LoginType: auth.OAuth2,
 			LoginName: "oauth2-conflict-login",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		// Try to rename to existing user's name
-		err := user.RenameUser(db.DefaultContext, oauth2User, existing.Name, admin)
+		err := user.RenameUser(context.TODO(), oauth2User, existing.Name, admin)
 		assert.Error(t, err, "Should not allow renaming to existing username")
 	})
 
@@ -329,10 +330,10 @@ func TestAdminRenameNonLocalUsersEdgeCases(t *testing.T) {
 			LoginType: auth.OAuth2,
 			LoginName: "oauth2-invalid-login",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		// Try invalid username
-		err := user.RenameUser(db.DefaultContext, oauth2User, "invalid name!", admin)
+		err := user.RenameUser(context.TODO(), oauth2User, "invalid name!", admin)
 		assert.Error(t, err, "Should reject invalid characters in username")
 	})
 
@@ -345,18 +346,18 @@ func TestAdminRenameNonLocalUsersEdgeCases(t *testing.T) {
 			FullName:  "Full Name",
 			Website:   "https://example.com",
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, oauth2User))
+		assert.NoError(t, user_model.CreateUser(context.TODO(), oauth2User, nil))
 
 		originalEmail := oauth2User.Email
 		originalLoginName := oauth2User.LoginName
 		originalFullName := oauth2User.FullName
 
 		// Rename user
-		err := user.RenameUser(db.DefaultContext, oauth2User, "oauth2newname", admin)
+		err := user.RenameUser(context.TODO(), oauth2User, "oauth2newname", admin)
 		assert.NoError(t, err)
 
 		// Verify other data is preserved
-		renamed, err := user_model.GetUserByName(db.DefaultContext, "oauth2newname")
+		renamed, err := user_model.GetUserByName(context.TODO(), "oauth2newname")
 		assert.NoError(t, err)
 		assert.Equal(t, originalEmail, renamed.Email)
 		assert.Equal(t, originalLoginName, renamed.LoginName)
