@@ -37,7 +37,7 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 			FileOptions: api.FileOptions{
 				Message: "Create file without dates",
 			},
-			Content: "dGVzdCBjb250ZW50", // base64 "test content"
+			ContentBase64: "dGVzdCBjb250ZW50", // base64 "test content"
 			// Dates NOT specified
 		}).AddTokenAuth(token)
 		
@@ -51,7 +51,8 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 		// Verify dates are set to current time, not 2001-01-01
 		assert.NotNil(t, fileResponse.Commit)
 		if fileResponse.Commit != nil && fileResponse.Commit.Committer != nil {
-			commitDate := fileResponse.Commit.Committer.Date
+			commitDateStr := fileResponse.Commit.Committer.Date
+			commitDate, _ := time.Parse(time.RFC3339, commitDateStr)
 			
 			// Should be within reasonable range of now
 			assert.False(t, commitDate.Year() == 2001, "Date should not default to 2001")
@@ -70,12 +71,12 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 		req := NewRequestWithJSON(t, "POST", fileURL, &api.CreateFileOptions{
 			FileOptions: api.FileOptions{
 				Message: "Create file with specific dates",
-				Dates: &api.CommitDateOptions{
+				Dates: api.CommitDateOptions{
 					Author:    specificDate,
 					Committer: specificDate,
 				},
 			},
-			Content: "dGVzdCBjb250ZW50",
+			ContentBase64: "dGVzdCBjb250ZW50",
 		}).AddTokenAuth(token)
 		
 		resp := MakeRequest(t, req, http.StatusCreated)
@@ -86,7 +87,8 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 		// Should use the specified date
 		assert.NotNil(t, fileResponse.Commit)
 		if fileResponse.Commit != nil && fileResponse.Commit.Committer != nil {
-			commitDate := fileResponse.Commit.Committer.Date
+			commitDateStr := fileResponse.Commit.Committer.Date
+			commitDate, _ := time.Parse(time.RFC3339, commitDateStr)
 			assert.Equal(t, specificDate.Year(), commitDate.Year())
 			assert.Equal(t, specificDate.Month(), commitDate.Month())
 			assert.Equal(t, specificDate.Day(), commitDate.Day())
@@ -102,7 +104,7 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 			FileOptions: api.FileOptions{
 				Message: "Initial create",
 			},
-			Content: "aW5pdGlhbA==", // base64 "initial"
+			ContentBase64: "aW5pdGlhbA==", // base64 "initial"
 		}).AddTokenAuth(token)
 		createResp := MakeRequest(t, createReq, http.StatusCreated)
 		
@@ -115,7 +117,7 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 			FileOptions: api.FileOptions{
 				Message: "Update file",
 			},
-			Content: "dXBkYXRlZA==", // base64 "updated"
+			ContentBase64: "dXBkYXRlZA==", // base64 "updated"
 			SHA:     createResponse.Content.SHA,
 			// Dates NOT specified
 		}).AddTokenAuth(token)
@@ -129,7 +131,8 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 		// Verify update date is current, not 2001
 		assert.NotNil(t, updateResponse.Commit)
 		if updateResponse.Commit != nil && updateResponse.Commit.Committer != nil {
-			commitDate := updateResponse.Commit.Committer.Date
+			commitDateStr := updateResponse.Commit.Committer.Date
+			commitDate, _ := time.Parse(time.RFC3339, commitDateStr)
 			assert.False(t, commitDate.Year() == 2001)
 			assert.GreaterOrEqual(t, commitDate.Unix(), before.Add(-time.Minute).Unix())
 			assert.LessOrEqual(t, commitDate.Unix(), after.Add(time.Minute).Unix())
@@ -145,7 +148,7 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 			FileOptions: api.FileOptions{
 				Message: "Create for deletion",
 			},
-			Content: "ZGVsZXRl", // base64 "delete"
+			ContentBase64: "ZGVsZXRl", // base64 "delete"
 		}).AddTokenAuth(token)
 		createResp := MakeRequest(t, createReq, http.StatusCreated)
 		
@@ -170,7 +173,8 @@ func TestAPIContentsDateDefaults(t *testing.T) {
 		
 		// Verify deletion commit date is current
 		if deleteResponse.Commit != nil && deleteResponse.Commit.Committer != nil {
-			commitDate := deleteResponse.Commit.Committer.Date
+			commitDateStr := deleteResponse.Commit.Committer.Date
+			commitDate, _ := time.Parse(time.RFC3339, commitDateStr)
 			assert.False(t, commitDate.Year() == 2001)
 			assert.GreaterOrEqual(t, commitDate.Unix(), before.Add(-time.Minute).Unix())
 		}
@@ -195,12 +199,12 @@ func TestAPIContentsDateEdgeCases(t *testing.T) {
 		req := NewRequestWithJSON(t, "POST", fileURL, &api.CreateFileOptions{
 			FileOptions: api.FileOptions{
 				Message: "Create with only author date",
-				Dates: &api.CommitDateOptions{
+				Dates: api.CommitDateOptions{
 					Author: authorDate,
 					// Committer date NOT specified
 				},
 			},
-			Content: "cGFydGlhbA==",
+			ContentBase64: "cGFydGlhbA==",
 		}).AddTokenAuth(token)
 		
 		resp := MakeRequest(t, req, http.StatusCreated)
@@ -230,12 +234,12 @@ func TestAPIContentsDateEdgeCases(t *testing.T) {
 		req := NewRequestWithJSON(t, "POST", fileURL, &api.CreateFileOptions{
 			FileOptions: api.FileOptions{
 				Message: "Create with future date",
-				Dates: &api.CommitDateOptions{
+				Dates: api.CommitDateOptions{
 					Author:    futureDate,
 					Committer: futureDate,
 				},
 			},
-			Content: "ZnV0dXJl",
+			ContentBase64: "ZnV0dXJl",
 		}).AddTokenAuth(token)
 		
 		resp := MakeRequest(t, req, http.StatusCreated)
@@ -259,12 +263,12 @@ func TestAPIContentsDateEdgeCases(t *testing.T) {
 		req := NewRequestWithJSON(t, "POST", fileURL, &api.CreateFileOptions{
 			FileOptions: api.FileOptions{
 				Message: "Create with past date",
-				Dates: &api.CommitDateOptions{
+				Dates: api.CommitDateOptions{
 					Author:    pastDate,
 					Committer: pastDate,
 				},
 			},
-			Content: "cGFzdA==",
+			ContentBase64: "cGFzdA==",
 		}).AddTokenAuth(token)
 		
 		resp := MakeRequest(t, req, http.StatusCreated)
@@ -288,12 +292,12 @@ func TestAPIContentsDateEdgeCases(t *testing.T) {
 		req := NewRequestWithJSON(t, "POST", fileURL, &api.CreateFileOptions{
 			FileOptions: api.FileOptions{
 				Message: "Create with zero time",
-				Dates: &api.CommitDateOptions{
+				Dates: api.CommitDateOptions{
 					Author:    zeroTime,
 					Committer: zeroTime,
 				},
 			},
-			Content: "emVybw==",
+			ContentBase64: "emVybw==",
 		}).AddTokenAuth(token)
 		
 		before := time.Now()
@@ -305,7 +309,8 @@ func TestAPIContentsDateEdgeCases(t *testing.T) {
 		
 		// Zero time should be treated as "not specified" and use current time
 		if fileResponse.Commit != nil && fileResponse.Commit.Committer != nil {
-			commitDate := fileResponse.Commit.Committer.Date
+			commitDateStr := fileResponse.Commit.Committer.Date
+			commitDate, _ := time.Parse(time.RFC3339, commitDateStr)
 			// Should NOT be 0001-01-01 (zero time) or 2001-01-01 (bug)
 			assert.Greater(t, commitDate.Year(), 2010)
 			assert.GreaterOrEqual(t, commitDate.Unix(), before.Add(-time.Minute).Unix())
@@ -337,7 +342,7 @@ func TestAPIContentsDateConsistency(t *testing.T) {
 				FileOptions: api.FileOptions{
 					Message: fmt.Sprintf("Create %s", fileName),
 				},
-				Content: "dGVzdA==",
+				ContentBase64: "dGVzdA==",
 			}).AddTokenAuth(token)
 			
 			resp := MakeRequest(t, req, http.StatusCreated)
@@ -370,7 +375,7 @@ func TestAPIContentsDateConsistency(t *testing.T) {
 			FileOptions: api.FileOptions{
 				Message: "Test both dates",
 			},
-			Content: "Ym90aA==",
+			ContentBase64: "Ym90aA==",
 		}).AddTokenAuth(token)
 		
 		resp := MakeRequest(t, req, http.StatusCreated)
@@ -404,12 +409,12 @@ func TestAPIContentsDateConsistency(t *testing.T) {
 		req := NewRequestWithJSON(t, "POST", fileURL, &api.CreateFileOptions{
 			FileOptions: api.FileOptions{
 				Message: "Test timezone",
-				Dates: &api.CommitDateOptions{
+				Dates: api.CommitDateOptions{
 					Author:    dateNY,
 					Committer: dateNY,
 				},
 			},
-			Content: "dGltZXpvbmU=",
+			ContentBase64: "dGltZXpvbmU=",
 		}).AddTokenAuth(token)
 		
 		resp := MakeRequest(t, req, http.StatusCreated)
@@ -419,7 +424,8 @@ func TestAPIContentsDateConsistency(t *testing.T) {
 		
 		// Date should be preserved (converted to UTC for storage)
 		if fileResponse.Commit != nil && fileResponse.Commit.Committer != nil {
-			commitDate := fileResponse.Commit.Committer.Date
+			commitDateStr := fileResponse.Commit.Committer.Date
+			commitDate, _ := time.Parse(time.RFC3339, commitDateStr)
 			assert.Equal(t, 2022, commitDate.Year())
 			assert.Equal(t, time.July, commitDate.Month())
 		}
@@ -444,7 +450,7 @@ func TestAPIContentsDateRegression(t *testing.T) {
 			FileOptions: api.FileOptions{
 				Message: "Ensure not 2001",
 			},
-			Content: "bm90MjAwMQ==",
+			ContentBase64: "bm90MjAwMQ==",
 		}).AddTokenAuth(token)
 		
 		resp := MakeRequest(t, req, http.StatusCreated)
@@ -454,7 +460,8 @@ func TestAPIContentsDateRegression(t *testing.T) {
 		
 		// CRITICAL: Should NOT be 2001-01-01
 		if fileResponse.Commit != nil && fileResponse.Commit.Committer != nil {
-			commitDate := fileResponse.Commit.Committer.Date
+			commitDateStr := fileResponse.Commit.Committer.Date
+			commitDate, _ := time.Parse(time.RFC3339, commitDateStr)
 			
 			assert.NotEqual(t, 2001, commitDate.Year(), "BUG: Date defaulted to 2001!")
 			assert.NotEqual(t, 1, int(commitDate.Month()), "BUG: Date defaulted to January 2001!")
@@ -475,7 +482,7 @@ func TestAPIContentsDateRegression(t *testing.T) {
 		// Create
 		createReq := NewRequestWithJSON(t, "POST", baseURL, &api.CreateFileOptions{
 			FileOptions: api.FileOptions{Message: "Create"},
-			Content:     "Y3JlYXRl",
+			ContentBase64:     "Y3JlYXRl",
 		}).AddTokenAuth(token)
 		createResp := MakeRequest(t, createReq, http.StatusCreated)
 		
@@ -485,7 +492,7 @@ func TestAPIContentsDateRegression(t *testing.T) {
 		// Update
 		updateReq := NewRequestWithJSON(t, "PUT", baseURL, &api.UpdateFileOptions{
 			FileOptions: api.FileOptions{Message: "Update"},
-			Content:     "dXBkYXRl",
+			ContentBase64:     "dXBkYXRl",
 			SHA:         createResponse.Content.SHA,
 		}).AddTokenAuth(token)
 		updateResp := MakeRequest(t, updateReq, http.StatusOK)
