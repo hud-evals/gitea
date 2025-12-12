@@ -412,6 +412,12 @@ func Rerun(ctx *context_module.Context) {
 		return
 	}
 
+	// rerun is not allowed if the run is not done
+	if !run.Status.IsDone() {
+		ctx.JSONError(ctx.Locale.Tr("actions.runs.not_done"))
+		return
+	}
+
 	// can not rerun job when workflow is disabled
 	cfgUnit := ctx.Repo.Repository.MustGetUnit(ctx, unit.TypeActions)
 	cfg := cfgUnit.ActionsConfig()
