@@ -16,6 +16,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/container"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/util"
@@ -498,36 +499,55 @@ func HasAnyUnitAccess(ctx context.Context, userID int64, repo *repo_model.Reposi
 	return perm.HasAnyUnitAccess(), nil
 }
 
-// getUsersWithAccessMode returns users that have at least given access mode to the repository.
-func getUsersWithAccessMode(ctx context.Context, repo *repo_model.Repository, mode perm_model.AccessMode) (_ []*user_model.User, err error) {
-	if err = repo.LoadOwner(ctx); err != nil {
+// GetUsersWithUnitAccess returns users that have at least given access mode to the repository unit.
+func GetUsersWithUnitAccess(ctx context.Context, repo *repo_model.Repository, mode perm_model.AccessMode, unitType unit.Type) (users []*user_model.User, err error) {
+	userIDs, err := GetUserIDsWithUnitAccess(ctx, repo, mode, unitType)
+	if err != nil {
 		return nil, err
 	}
+	if len(userIDs) == 0 {
+		return users, nil
+	}
+	if err = db.GetEngine(ctx).In("id", userIDs.Values()).OrderBy("`name`").Find(&users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
 
+// GetUserIDsWithUnitAccess returns user IDs that have at least given access mode to the repository unit.
+// The key fix: this now includes team members for organization-owned repositories.
+func GetUserIDsWithUnitAccess(ctx context.Context, repo *repo_model.Repository, mode perm_model.AccessMode, unitType unit.Type) (container.Set[int64], error) {
+	userIDs := container.Set[int64]{}
 	e := db.GetEngine(ctx)
 	accesses := make([]*Access, 0, 10)
-	if err = e.Where("repo_id = ? AND mode >= ?", repo.ID, mode).Find(&accesses); err != nil {
+	if err := e.Where("repo_id = ? AND mode >= ?", repo.ID, mode).Find(&accesses); err != nil {
 		return nil, err
 	}
+	for _, a := range accesses {
+		userIDs.Add(a.UserID)
+	}
 
-	// Leave a seat for owner itself to append later, but if owner is an organization
-	// and just waste 1 unit is cheaper than re-allocate memory once.
-	users := make([]*user_model.User, 0, len(accesses)+1)
-	if len(accesses) > 0 {
-		userIDs := make([]int64, len(accesses))
-		for i := 0; i < len(accesses); i++ {
-			userIDs[i] = accesses[i].UserID
-		}
-
-		if err = e.In("id", userIDs).Find(&users); err != nil {
-			return nil, err
-		}
+	if err := repo.LoadOwner(ctx); err != nil {
+		return nil, err
 	}
 	if !repo.Owner.IsOrganization() {
-		users = append(users, repo.Owner)
+		userIDs.Add(repo.Owner.ID)
+	} else {
+		// BUG FIX: Include team members for organization-owned repositories
+		teamUserIDs, err := organization.GetTeamUserIDsWithAccessToAnyRepoUnit(ctx, repo.OwnerID, repo.ID, mode, unitType)
+		if err != nil {
+			return nil, err
+		}
+		userIDs.AddMultiple(teamUserIDs...)
 	}
+	return userIDs, nil
+}
 
-	return users, nil
+// getUsersWithAccessMode returns users that have at least given access mode to the repository.
+// Deprecated: Use GetUsersWithUnitAccess instead.
+func getUsersWithAccessMode(ctx context.Context, repo *repo_model.Repository, mode perm_model.AccessMode) (_ []*user_model.User, err error) {
+	// For backward compatibility, use unit.TypeCode as a default unit type
+	return GetUsersWithUnitAccess(ctx, repo, mode, unit.TypeCode)
 }
 
 // GetRepoReaders returns all users that have explicit read access or higher to the repository.
