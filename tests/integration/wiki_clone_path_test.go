@@ -185,7 +185,7 @@ func TestWikiCloneWithSpecialCharacters(t *testing.T) {
 
 	onGiteaRun(t, func(t *testing.T, u *url.URL) {
 		session := loginUser(t, "user1")
-		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeWriteUser)
 
 		// Create a repo with a name that might cause path issues
 		repoName := "test-repo-1"
