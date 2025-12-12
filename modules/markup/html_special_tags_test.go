@@ -21,7 +21,8 @@ func TestSpecialTagsEscaping(t *testing.T) {
 	setting.StaticURLPrefix = markup.TestAppURL
 	defer testModule.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
 
-	test := func(input, expected string) {
+	test := func(t *testing.T, input, expected string) {
+		t.Helper()
 		var res strings.Builder
 		err := markup.PostProcessDefault(markup.NewTestRenderContext(markup.TestAppURL, map[string]string{"user": "test-user", "repo": "test-repo"}), strings.NewReader(input), &res)
 		assert.NoError(t, err)
@@ -30,50 +31,50 @@ func TestSpecialTagsEscaping(t *testing.T) {
 
 	// Script tag tests - these should be escaped to prevent XSS
 	t.Run("ScriptTagUnclosed", func(t *testing.T) {
-		test("<script>alert('xss')", `&lt;script&gt;alert('xss')`)
+		test(t, "<script>alert('xss')", `&lt;script&gt;alert('xss')`)
 	})
 
 	t.Run("ScriptTagClosed", func(t *testing.T) {
-		test("<script>a</script>", `&lt;script&gt;a&lt;/script&gt;`)
+		test(t, "<script>a</script>", `&lt;script&gt;a&lt;/script&gt;`)
 	})
 
 	t.Run("ScriptTagUppercase", func(t *testing.T) {
-		test("<SCRIPT>a</SCRIPT>", `&lt;SCRIPT&gt;a&lt;/SCRIPT&gt;`)
+		test(t, "<SCRIPT>a</SCRIPT>", `&lt;SCRIPT&gt;a&lt;/SCRIPT&gt;`)
 	})
 
 	t.Run("ScriptTagMixedCase", func(t *testing.T) {
-		test("<ScRiPt>a</sCrIpT>", `&lt;ScRiPt&gt;a&lt;/sCrIpT&gt;`)
+		test(t, "<ScRiPt>a</sCrIpT>", `&lt;ScRiPt&gt;a&lt;/sCrIpT&gt;`)
 	})
 
 	// Style tag tests - these should be escaped to prevent CSS injection
 	t.Run("StyleTagUnclosed", func(t *testing.T) {
-		test("<style>.evil{}", `&lt;style&gt;.evil{}`)
+		test(t, "<style>.evil{}", `&lt;style&gt;.evil{}`)
 	})
 
 	t.Run("StyleTagClosed", func(t *testing.T) {
-		test("<style>a</style>", `&lt;style&gt;a&lt;/style&gt;`)
+		test(t, "<style>a</style>", `&lt;style&gt;a&lt;/style&gt;`)
 	})
 
 	t.Run("StyleTagUppercase", func(t *testing.T) {
-		test("<STYLE>a</STYLE>", `&lt;STYLE&gt;a&lt;/STYLE&gt;`)
+		test(t, "<STYLE>a</STYLE>", `&lt;STYLE&gt;a&lt;/STYLE&gt;`)
 	})
 
 	t.Run("StyleTagMixedCase", func(t *testing.T) {
-		test("<Style>a</STYLE>", `&lt;Style&gt;a&lt;/STYLE&gt;`)
+		test(t, "<Style>a</STYLE>", `&lt;Style&gt;a&lt;/STYLE&gt;`)
 	})
 
 	// HTML and HEAD tags - these were already handled, verify they still work
 	t.Run("HtmlTag", func(t *testing.T) {
-		test("<html>content", `&lt;html&gt;content`)
+		test(t, "<html>content", `&lt;html&gt;content`)
 	})
 
 	t.Run("HeadTag", func(t *testing.T) {
-		test("<head>content", `&lt;head&gt;content`)
+		test(t, "<head>content", `&lt;head&gt;content`)
 	})
 
 	// Multiple dangerous tags in one input
 	t.Run("MultipleDangerousTags", func(t *testing.T) {
-		test("<script>a</script><style>b</style>", `&lt;script&gt;a&lt;/script&gt;&lt;style&gt;b&lt;/style&gt;`)
+		test(t, "<script>a</script><style>b</style>", `&lt;script&gt;a&lt;/script&gt;&lt;style&gt;b&lt;/style&gt;`)
 	})
 
 	// Verify safe tags are NOT escaped
