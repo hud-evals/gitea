@@ -149,3 +149,47 @@ func getNewestReviewStateApartFrom(ctx context.Context, userID, pullID int64, co
 	// As we have no error cases left, the result must be the first element in the list
 	return &reviews[0], nil
 }
+
+// UpdateViewedFilesState marks the given files as viewed for the user on the PR.
+// This is a convenience wrapper that uses a placeholder commit SHA for simplified testing.
+func UpdateViewedFilesState(ctx context.Context, userID, pullID int64, files []string) error {
+	updatedFiles := make(map[string]ViewedState)
+	for _, file := range files {
+		updatedFiles[file] = Viewed
+	}
+	// Use a default commit SHA for simplified API
+	return UpdateReviewState(ctx, userID, pullID, "HEAD", updatedFiles)
+}
+
+// GetViewedFilesCount returns the number of files marked as viewed for the user on the PR.
+func GetViewedFilesCount(ctx context.Context, userID, pullID int64) (int, error) {
+	review, err := GetNewestReviewState(ctx, userID, pullID)
+	if err != nil {
+		return 0, err
+	}
+	if review == nil {
+		return 0, nil
+	}
+	return review.GetViewedFileCount(), nil
+}
+
+// HandleFileChange marks a file as changed for all users who have reviewed this PR.
+// This should be called when a file is modified, causing the viewed counter to decrease.
+func HandleFileChange(ctx context.Context, pullID int64, filename string) error {
+	var reviews []ReviewState
+	err := db.GetEngine(ctx).Where("pull_id = ?", pullID).Find(&reviews)
+	if err != nil {
+		return err
+	}
+
+	for _, review := range reviews {
+		if state, ok := review.UpdatedFiles[filename]; ok && state == Viewed {
+			review.UpdatedFiles[filename] = HasChanged
+			_, err := db.GetEngine(ctx).ID(review.ID).Update(&ReviewState{UpdatedFiles: review.UpdatedFiles})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
