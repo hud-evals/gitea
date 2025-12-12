@@ -130,7 +130,7 @@ jobs:
 		})
 
 		// Reload run to get updated status - use GetRunByIndex instead of GetRunByID
-		run, err = actions_model.GetRunByIndex(context.Background(), repo.ID, run.Index)
+		run, err := actions_model.GetRunByIndex(context.Background(), repo.ID, run.Index)
 		assert.NoError(t, err)
 		assert.Equal(t, actions_model.StatusSuccess, run.Status)
 
