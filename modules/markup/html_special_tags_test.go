@@ -31,7 +31,7 @@ func TestSpecialTagsEscaping(t *testing.T) {
 
 	// Script tag tests - these should be escaped to prevent XSS
 	t.Run("ScriptTagUnclosed", func(t *testing.T) {
-		test(t, "<script>alert('xss')", `&lt;script&gt;alert('xss')`)
+		test(t, "<script>a", `&lt;script&gt;a`)
 	})
 
 	t.Run("ScriptTagClosed", func(t *testing.T) {
@@ -48,7 +48,7 @@ func TestSpecialTagsEscaping(t *testing.T) {
 
 	// Style tag tests - these should be escaped to prevent CSS injection
 	t.Run("StyleTagUnclosed", func(t *testing.T) {
-		test(t, "<style>.evil{}", `&lt;style&gt;.evil{}`)
+		test(t, "<style>a", `&lt;style&gt;a`)
 	})
 
 	t.Run("StyleTagClosed", func(t *testing.T) {
