@@ -4,13 +4,13 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
 
 	auth_model "code.gitea.io/gitea/models/auth"
-	"code.gitea.io/gitea/models/db"
 	org_model "code.gitea.io/gitea/models/organization"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
@@ -45,7 +45,7 @@ func TestTeamMemberCanAccessRepo(t *testing.T) {
 			Passwd:   "password123",
 			IsActive: true,
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, teamMember, &user_model.CreateUserOverwriteOptions{}))
+		assert.NoError(t, user_model.CreateUser(context.Background(), teamMember, nil))
 
 		// Create organization
 		orgName := "testorg-team-access"
@@ -137,7 +137,7 @@ func TestDirectCollaboratorStillWorks(t *testing.T) {
 			Passwd:   "password123",
 			IsActive: true,
 		}
-		assert.NoError(t, user_model.CreateUser(db.DefaultContext, directUser, &user_model.CreateUserOverwriteOptions{}))
+		assert.NoError(t, user_model.CreateUser(context.Background(), directUser, nil))
 
 		// Create organization and private repo
 		orgName := "testorg-direct"
