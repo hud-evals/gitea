@@ -44,7 +44,7 @@ func TestTeamMemberCanAccessRepo(t *testing.T) {
 			Email:    teamMemberEmail,
 			IsActive: true,
 		}
-		assert.NoError(t, teamMember.SetPassword("password123"))
+		assert.NoError(t, teamMember.SetPassword("password"))
 		assert.NoError(t, user_model.CreateUser(context.Background(), teamMember, nil))
 
 		// Create organization
@@ -136,7 +136,7 @@ func TestDirectCollaboratorStillWorks(t *testing.T) {
 			Email:    "direct@example.com",
 			IsActive: true,
 		}
-		assert.NoError(t, directUser.SetPassword("password123"))
+		assert.NoError(t, directUser.SetPassword("password"))
 		assert.NoError(t, user_model.CreateUser(context.Background(), directUser, nil))
 
 		// Create organization and private repo
