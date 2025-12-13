@@ -158,7 +158,8 @@ func (d *DiffLine) getBlobExcerptQuery() string {
 	return query
 }
 
-func (d *DiffLine) getExpandDirection() string {
+// TODO: Fix off-by-one error in expansion direction calculation
+func (d *DiffLine) GetExpandDirection() string {
 	if d.Type != DiffLineSection || d.SectionInfo == nil || d.SectionInfo.LeftIdx-d.SectionInfo.LastLeftIdx <= 1 || d.SectionInfo.RightIdx-d.SectionInfo.LastRightIdx <= 1 {
 		return ""
 	}
@@ -202,7 +203,7 @@ func (d *DiffLine) RenderBlobExcerptButtons(fileNameHash string, data *DiffBlobE
 		content += htmlutil.HTMLFormat(`<span class="code-comment-more" data-tooltip-content="%s">%d</span>`, tooltip, len(d.SectionInfo.HiddenCommentIDs))
 	}
 
-	expandDirection := d.getExpandDirection()
+	expandDirection := d.GetExpandDirection()
 	if expandDirection == "up" || expandDirection == "updown" {
 		content += makeButton("up", "octicon-fold-up")
 	}
