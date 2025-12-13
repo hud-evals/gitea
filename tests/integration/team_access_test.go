@@ -4,21 +4,22 @@
 package integration
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	auth_model "code.gitea.io/gitea/models/auth"
+	"code.gitea.io/gitea/models/db"
 	org_model "code.gitea.io/gitea/models/organization"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
-	"code.gitea.io/gitea/modules/optional"
 	api "code.gitea.io/gitea/modules/structs"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTeamMemberCanAccessRepo tests that users in a team with repo access
@@ -38,18 +39,14 @@ func TestTeamMemberCanAccessRepo(t *testing.T) {
 		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteOrganization, auth_model.AccessTokenScopeWriteRepository)
 
 		// Create a test user who will be added to team
+		// Copy from user2 (which has a valid password hash for "password") and modify
 		teamMemberUsername := "teammember"
-		teamMemberEmail := "teammember@example.com"
-		teamMember := &user_model.User{
-			Name:     teamMemberUsername,
-			Email:    teamMemberEmail,
-			IsActive: true,
-		}
-		assert.NoError(t, teamMember.SetPassword("password"))
-		assert.NoError(t, user_model.CreateUser(context.Background(), teamMember, nil,
-			&user_model.CreateUserOverwriteOptions{
-				IsActive: optional.Some(true),
-			}))
+		teamMember := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		teamMember.Name = teamMemberUsername
+		teamMember.LowerName = strings.ToLower(teamMemberUsername)
+		teamMember.Email = "teammember@example.com"
+		teamMember.ID = 0
+		require.NoError(t, db.Insert(t.Context(), teamMember))
 
 		// Create organization
 		orgName := "testorg-team-access"
@@ -135,17 +132,14 @@ func TestDirectCollaboratorStillWorks(t *testing.T) {
 		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteOrganization, auth_model.AccessTokenScopeWriteRepository)
 
 		// Create user with direct access
+		// Copy from user2 (which has a valid password hash for "password") and modify
 		directUsername := "directuser"
-		directUser := &user_model.User{
-			Name:     directUsername,
-			Email:    "direct@example.com",
-			IsActive: true,
-		}
-		assert.NoError(t, directUser.SetPassword("password"))
-		assert.NoError(t, user_model.CreateUser(context.Background(), directUser, nil,
-			&user_model.CreateUserOverwriteOptions{
-				IsActive: optional.Some(true),
-			}))
+		directUser := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		directUser.Name = directUsername
+		directUser.LowerName = strings.ToLower(directUsername)
+		directUser.Email = "direct@example.com"
+		directUser.ID = 0
+		require.NoError(t, db.Insert(t.Context(), directUser))
 
 		// Create organization and private repo
 		orgName := "testorg-direct"
