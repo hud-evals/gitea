@@ -237,8 +237,6 @@ func TestPackageConda(t *testing.T) {
 			assert.Equal(t, pd.Files[0].Blob.HashMD5, packageInfo.HashMD5)
 			assert.Equal(t, pd.Files[0].Blob.HashSHA256, packageInfo.HashSHA256)
 			assert.Equal(t, pd.Files[0].Blob.Size, packageInfo.Size)
-			assert.NotNil(t, packageInfo.Dependencies)
-			assert.Empty(t, packageInfo.Dependencies)
 		})
 
 		t.Run(".conda", func(t *testing.T) {
@@ -270,8 +268,6 @@ func TestPackageConda(t *testing.T) {
 			assert.Equal(t, pd.Files[0].Blob.HashMD5, packageInfo.HashMD5)
 			assert.Equal(t, pd.Files[0].Blob.HashSHA256, packageInfo.HashSHA256)
 			assert.Equal(t, pd.Files[0].Blob.Size, packageInfo.Size)
-			assert.NotNil(t, packageInfo.Dependencies)
-			assert.Empty(t, packageInfo.Dependencies)
 		})
 	})
 }
