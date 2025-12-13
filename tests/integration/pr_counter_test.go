@@ -291,3 +291,112 @@ func TestPRCounterMixedOperations(t *testing.T) {
 	})
 }
 
+// TestPRCounterUsesIncrementNotRecalculation tests that PR counters use
+// atomic increment/decrement operations rather than recalculating from scratch.
+//
+// This test intentionally corrupts counter values to detect if the code is
+// recalculating (baseline bug) vs incrementing (golden fix).
+//
+// Expected behavior:
+// - Baseline: Recalculates to actual count (test FAILS) ❌
+// - Golden: Increments from corrupted value (test PASSES) ✅
+func TestPRCounterUsesIncrementNotRecalculation(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		session := loginUser(t, user2.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeWriteUser)
+
+		// Create test repository
+		repoName := "pr-counter-increment-test"
+		apiRepoOpts := api.CreateRepoOption{
+			Name:          repoName,
+			DefaultBranch: "main",
+			AutoInit:      true,
+		}
+		req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &apiRepoOpts).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusCreated)
+
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user2.ID, Name: repoName})
+
+		// CRITICAL: Intentionally corrupt counters to detect recalculation
+		corruptedCount := int64(9999)
+		repo.NumPulls = corruptedCount
+		repo.NumClosedPulls = 0
+
+		// Directly update the database with corrupted values
+		err := unittest.GetEngine(context.TODO()).ID(repo.ID).
+			Cols("num_pulls", "num_closed_pulls").
+			Update(repo)
+		assert.NoError(t, err, "Should successfully corrupt counter values for testing")
+
+		// Create a branch and PR (should INCREMENT, not recalculate)
+		branchName := "test-branch"
+		fileName := "test.txt"
+		fileOpts := &api.CreateFileOptions{
+			FileOptions: api.FileOptions{
+				BranchName:    repo.DefaultBranch,
+				NewBranchName: branchName,
+				Message:       "Add test file",
+			},
+			ContentBase64: "dGVzdA==", // "test" base64
+		}
+		req = NewRequestWithJSON(t, "POST",
+			fmt.Sprintf("/api/v1/repos/%s/%s/contents/%s", user2.Name, repoName, fileName),
+			&fileOpts).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusCreated)
+
+		prOpts := &api.CreatePullRequestOption{
+			Head:  branchName,
+			Base:  repo.DefaultBranch,
+			Title: "Test PR",
+		}
+		req = NewRequestWithJSON(t, "POST",
+			fmt.Sprintf("/api/v1/repos/%s/%s/pulls", user2.Name, repoName),
+			&prOpts).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusCreated)
+
+		// Reload repo to get updated counters
+		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+
+		// CRITICAL ASSERTION: This detects recalculation vs increment
+		// Baseline (recalculates): counter will be 1 (actual count) → TEST FAILS
+		// Golden (increments): counter will be 10000 (9999 + 1) → TEST PASSES
+		assert.Equal(t, corruptedCount+1, repo.NumPulls,
+			"Counter should be INCREMENTED from corrupted value (9999+1=10000), not recalculated. "+
+				"If actual=%d (close to 1), code is RECALCULATING (baseline bug). "+
+				"If actual=%d (10000), code is INCREMENTING (golden fix).",
+			repo.NumPulls, corruptedCount+1)
+
+		// Test that closing also increments (not recalculates)
+		req = NewRequestWithJSON(t, "PATCH",
+			fmt.Sprintf("/api/v1/repos/%s/%s/pulls/1", user2.Name, repoName),
+			&api.EditPullRequestOption{State: ptrString("closed")}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusCreated)
+
+		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+
+		// NumClosedPulls should increment from 0 to 1 (not recalculate)
+		assert.Equal(t, int64(1), repo.NumClosedPulls,
+			"Closed counter should INCREMENT from 0 to 1, not recalculate")
+
+		// Test that reopening decrements (not recalculates)
+		req = NewRequestWithJSON(t, "PATCH",
+			fmt.Sprintf("/api/v1/repos/%s/%s/pulls/1", user2.Name, repoName),
+			&api.EditPullRequestOption{State: ptrString("open")}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusCreated)
+
+		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+
+		// NumClosedPulls should decrement from 1 to 0 (not recalculate)
+		assert.Equal(t, int64(0), repo.NumClosedPulls,
+			"Closed counter should DECREMENT from 1 to 0, not recalculate")
+
+		// Total count should still be at the corrupted + 1 value
+		assert.Equal(t, corruptedCount+1, repo.NumPulls,
+			"Total counter should remain at incremented value (10000)")
+	})
+}
+
