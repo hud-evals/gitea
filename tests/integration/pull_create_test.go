@@ -60,50 +60,26 @@ func testPullCreate(t *testing.T, session *TestSession, user, repo string, toSel
 	return resp
 }
 
-type createPullRequestOptions struct {
-	BaseRepoOwner string
-	BaseRepoName  string
-	BaseBranch    string
-	HeadRepoOwner string
-	HeadRepoName  string
-	HeadBranch    string
-	Title         string
-	ReviewerIDs   string // comma-separated list of user IDs
-}
-
-func (opts createPullRequestOptions) IsValid() bool {
-	return opts.BaseRepoOwner != "" && opts.BaseRepoName != "" && opts.BaseBranch != "" &&
-		opts.HeadBranch != "" && opts.Title != ""
-}
-
-func testPullCreateDirectly(t *testing.T, session *TestSession, opts createPullRequestOptions) *httptest.ResponseRecorder {
-	if !opts.IsValid() {
-		t.Fatal("Invalid pull request options")
-	}
-
-	headCompare := opts.HeadBranch
-	if opts.HeadRepoOwner != "" {
-		if opts.HeadRepoName != "" {
-			headCompare = fmt.Sprintf("%s/%s:%s", opts.HeadRepoOwner, opts.HeadRepoName, opts.HeadBranch)
+func testPullCreateDirectly(t *testing.T, session *TestSession, baseRepoOwner, baseRepoName, baseBranch, headRepoOwner, headRepoName, headBranch, title string) *httptest.ResponseRecorder {
+	headCompare := headBranch
+	if headRepoOwner != "" {
+		if headRepoName != "" {
+			headCompare = fmt.Sprintf("%s/%s:%s", headRepoOwner, headRepoName, headBranch)
 		} else {
-			headCompare = fmt.Sprintf("%s:%s", opts.HeadRepoOwner, opts.HeadBranch)
+			headCompare = fmt.Sprintf("%s:%s", headRepoOwner, headBranch)
 		}
 	}
-	req := NewRequest(t, "GET", fmt.Sprintf("/%s/%s/compare/%s...%s", opts.BaseRepoOwner, opts.BaseRepoName, opts.BaseBranch, headCompare))
+	req := NewRequest(t, "GET", fmt.Sprintf("/%s/%s/compare/%s...%s", baseRepoOwner, baseRepoName, baseBranch, headCompare))
 	resp := session.MakeRequest(t, req, http.StatusOK)
 
 	// Submit the form for creating the pull
 	htmlDoc := NewHTMLParser(t, resp.Body)
 	link, exists := htmlDoc.doc.Find("form.ui.form").Attr("action")
 	assert.True(t, exists, "The template has changed")
-	params := map[string]string{
+	req = NewRequestWithValues(t, "POST", link, map[string]string{
 		"_csrf": htmlDoc.GetCSRF(),
-		"title": opts.Title,
-	}
-	if opts.ReviewerIDs != "" {
-		params["reviewer_ids"] = opts.ReviewerIDs
-	}
-	req = NewRequestWithValues(t, "POST", link, params)
+		"title": title,
+	})
 	resp = session.MakeRequest(t, req, http.StatusOK)
 	return resp
 }
@@ -270,15 +246,7 @@ func TestPullCreatePrFromBaseToFork(t *testing.T) {
 		testEditFile(t, sessionBase, "user2", "repo1", "master", "README.md", "Hello, World (Edited)\n")
 
 		// Create a PR
-		resp := testPullCreateDirectly(t, sessionFork, createPullRequestOptions{
-			BaseRepoOwner: "user1",
-			BaseRepoName:  "repo1",
-			BaseBranch:    "master",
-			HeadRepoOwner: "user2",
-			HeadRepoName:  "repo1",
-			HeadBranch:    "master",
-			Title:         "This is a pull title",
-		})
+		resp := testPullCreateDirectly(t, sessionFork, "user1", "repo1", "master", "user2", "repo1", "master", "This is a pull title")
 		// check the redirected URL
 		url := test.RedirectURL(resp)
 		assert.Regexp(t, "^/user1/repo1/pulls/[0-9]*$", url)
