@@ -61,7 +61,7 @@ func TestPRCounterAccuracy(t *testing.T) {
 					NewBranchName: branchName,
 					Message:       fmt.Sprintf("Add %s", fileName),
 				},
-				Content: "test content",
+				ContentBase64: "dGVzdCBjb250ZW50", // "test content" base64
 			}
 			req = NewRequestWithJSON(t, "POST",
 				fmt.Sprintf("/api/v1/repos/%s/%s/contents/%s", user2.Name, repoName, fileName),
@@ -178,7 +178,7 @@ func TestPRCounterMixedOperations(t *testing.T) {
 					NewBranchName: branchName,
 					Message:       fmt.Sprintf("Add %s", fileName),
 				},
-				Content: fmt.Sprintf("content %d", i),
+				ContentBase64: "Y29udGVudA==", // "content" base64
 			}
 			req := NewRequestWithJSON(t, "POST",
 				fmt.Sprintf("/api/v1/repos/%s/%s/contents/%s", user2.Name, repoName, fileName),
@@ -258,7 +258,7 @@ func TestPRCounterWithMerge(t *testing.T) {
 				NewBranchName: branchName,
 				Message:       "Add merge test file",
 			},
-			Content: "merge test content",
+			ContentBase64: "bWVyZ2UgdGVzdCBjb250ZW50", // "merge test content" base64
 		}
 		req = NewRequestWithJSON(t, "POST",
 			fmt.Sprintf("/api/v1/repos/%s/%s/contents/merge-test.txt", user2.Name, repoName),
