@@ -61,7 +61,7 @@ func TestPRCounterAccuracy(t *testing.T) {
 			fileName := fmt.Sprintf("test%d.txt", i)
 			fileOpts := &api.CreateFileOptions{
 				FileOptions: api.FileOptions{
-					BranchName:    branchName,
+					BranchName:    repo.DefaultBranch,
 					NewBranchName: branchName,
 					Message:       fmt.Sprintf("Add %s", fileName),
 				},
@@ -178,7 +178,7 @@ func TestPRCounterMixedOperations(t *testing.T) {
 			fileName := fmt.Sprintf("file%d.txt", i)
 			fileOpts := &api.CreateFileOptions{
 				FileOptions: api.FileOptions{
-					BranchName:    branchName,
+					BranchName:    repo.DefaultBranch,
 					NewBranchName: branchName,
 					Message:       fmt.Sprintf("Add %s", fileName),
 				},
