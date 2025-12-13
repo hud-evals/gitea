@@ -4,13 +4,13 @@
 package integration
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
 
 	auth_model "code.gitea.io/gitea/models/auth"
+	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
@@ -85,9 +85,9 @@ func TestPRCounterAccuracy(t *testing.T) {
 		}
 
 		// Reload repo to get updated counters
-		err := repo.LoadAttributes(context.TODO())
+		err := repo.LoadAttributes(t.Context())
 		assert.NoError(t, err)
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 
 		// Verify total counter increased by 3
@@ -105,7 +105,7 @@ func TestPRCounterAccuracy(t *testing.T) {
 		}
 
 		// Reload repo
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 
 		// Verify closed counter increased by 2
@@ -121,7 +121,7 @@ func TestPRCounterAccuracy(t *testing.T) {
 		MakeRequest(t, req, http.StatusCreated)
 
 		// Reload repo
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 
 		// CRITICAL TEST: On baseline, counter may be wrong due to recalculation bug
@@ -141,7 +141,7 @@ func TestPRCounterAccuracy(t *testing.T) {
 		}
 
 		// Reload repo
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 
 		// Final verification: all 3 PRs should be counted as closed
@@ -222,7 +222,7 @@ func TestPRCounterMixedOperations(t *testing.T) {
 		}
 
 		// Verify all 4 PRs created and open
-		repo, err := repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err := repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, initialNumPulls+4, repo.NumPulls, "Should have 4 PRs")
 		assert.Equal(t, initialNumClosedPulls, repo.NumClosedPulls, "No PRs closed yet")
@@ -232,21 +232,21 @@ func TestPRCounterMixedOperations(t *testing.T) {
 		closePR(2)
 		closePR(3)
 
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, initialNumClosedPulls+3, repo.NumClosedPulls, "3 PRs should be closed")
 
 		// Reopen PR 1
 		reopenPR(1)
 
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, initialNumClosedPulls+2, repo.NumClosedPulls, "2 PRs should be closed after reopening 1")
 
 		// Close PR 1 again
 		closePR(1)
 
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, initialNumClosedPulls+3, repo.NumClosedPulls, "3 PRs closed again")
 
@@ -255,14 +255,14 @@ func TestPRCounterMixedOperations(t *testing.T) {
 		reopenPR(2)
 		reopenPR(3)
 
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, initialNumClosedPulls, repo.NumClosedPulls, "All PRs should be open now")
 
 		// Close PR 4 (first time for this one)
 		closePR(4)
 
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, initialNumClosedPulls+1, repo.NumClosedPulls, "Only PR 4 should be closed")
 
@@ -270,21 +270,21 @@ func TestPRCounterMixedOperations(t *testing.T) {
 		for cycle := 0; cycle < 3; cycle++ {
 			closePR(1)
 			closePR(2)
-			repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+			repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 			assert.NoError(t, err)
 			assert.Equal(t, initialNumClosedPulls+3, repo.NumClosedPulls,
 				"After closing 1,2 in cycle %d: expected 3 closed (1,2,4)", cycle)
 
 			reopenPR(1)
 			reopenPR(2)
-			repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+			repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 			assert.NoError(t, err)
 			assert.Equal(t, initialNumClosedPulls+1, repo.NumClosedPulls,
 				"After reopening 1,2 in cycle %d: expected 1 closed (4)", cycle)
 		}
 
 		// Final state verification
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, initialNumPulls+4, repo.NumPulls, "Final: should have 4 total PRs")
 		assert.Equal(t, initialNumClosedPulls+1, repo.NumClosedPulls, "Final: only PR 4 should be closed")
@@ -319,12 +319,12 @@ func TestPRCounterUsesIncrementNotRecalculation(t *testing.T) {
 		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user2.ID, Name: repoName})
 
 		// CRITICAL: Intentionally corrupt counters to detect recalculation
-		corruptedCount := int64(9999)
+		corruptedCount := 9999
 		repo.NumPulls = corruptedCount
 		repo.NumClosedPulls = 0
 
 		// Directly update the database with corrupted values
-		err := unittest.GetEngine(context.TODO()).ID(repo.ID).
+		_, err := db.GetEngine(t.Context()).ID(repo.ID).
 			Cols("num_pulls", "num_closed_pulls").
 			Update(repo)
 		assert.NoError(t, err, "Should successfully corrupt counter values for testing")
@@ -356,7 +356,7 @@ func TestPRCounterUsesIncrementNotRecalculation(t *testing.T) {
 		MakeRequest(t, req, http.StatusCreated)
 
 		// Reload repo to get updated counters
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 
 		// CRITICAL ASSERTION: This detects recalculation vs increment
@@ -374,11 +374,11 @@ func TestPRCounterUsesIncrementNotRecalculation(t *testing.T) {
 			&api.EditPullRequestOption{State: ptrString("closed")}).AddTokenAuth(token)
 		MakeRequest(t, req, http.StatusCreated)
 
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 
 		// NumClosedPulls should increment from 0 to 1 (not recalculate)
-		assert.Equal(t, int64(1), repo.NumClosedPulls,
+		assert.Equal(t, 1, repo.NumClosedPulls,
 			"Closed counter should INCREMENT from 0 to 1, not recalculate")
 
 		// Test that reopening decrements (not recalculates)
@@ -387,14 +387,16 @@ func TestPRCounterUsesIncrementNotRecalculation(t *testing.T) {
 			&api.EditPullRequestOption{State: ptrString("open")}).AddTokenAuth(token)
 		MakeRequest(t, req, http.StatusCreated)
 
-		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
 		assert.NoError(t, err)
 
 		// NumClosedPulls should decrement from 1 to 0 (not recalculate)
-		assert.Equal(t, int64(0), repo.NumClosedPulls,
+		assert.Equal(t, 0, repo.NumClosedPulls,
 			"Closed counter should DECREMENT from 1 to 0, not recalculate")
 
-		// Total count should still be at the corrupted + 1 value
+		// Reload and verify total count should still be at the corrupted + 1 value
+		repo, err = repo_model.GetRepositoryByID(t.Context(), repo.ID)
+		assert.NoError(t, err)
 		assert.Equal(t, corruptedCount+1, repo.NumPulls,
 			"Total counter should remain at incremented value (10000)")
 	})
