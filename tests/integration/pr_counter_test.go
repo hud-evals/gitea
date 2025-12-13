@@ -172,8 +172,8 @@ func TestPRCounterMixedOperations(t *testing.T) {
 		initialNumPulls := repo.NumPulls
 		initialNumClosedPulls := repo.NumClosedPulls
 
-		// Create PR 1 and close immediately
-		createAndClosePR := func(i int) {
+		// Helper to create a PR
+		createPR := func(i int) {
 			branchName := fmt.Sprintf("branch-%d", i)
 			fileName := fmt.Sprintf("file%d.txt", i)
 			fileOpts := &api.CreateFileOptions{
@@ -198,38 +198,96 @@ func TestPRCounterMixedOperations(t *testing.T) {
 				fmt.Sprintf("/api/v1/repos/%s/%s/pulls", user2.Name, repoName),
 				&prOpts).AddTokenAuth(token)
 			MakeRequest(t, req, http.StatusCreated)
+		}
 
-			// Close it
-			req = NewRequestWithJSON(t, "PATCH",
+		// Helper to close a PR
+		closePR := func(i int) {
+			req := NewRequestWithJSON(t, "PATCH",
 				fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", user2.Name, repoName, i),
 				&api.EditPullRequestOption{State: ptrString("closed")}).AddTokenAuth(token)
 			MakeRequest(t, req, http.StatusCreated)
 		}
 
-		// Create and close 2 PRs
-		createAndClosePR(1)
-		createAndClosePR(2)
-
-		// Verify counters
-		repo, err := repo_model.GetRepositoryByID(context.TODO(), repo.ID)
-		assert.NoError(t, err)
-		assert.Equal(t, initialNumPulls+2, repo.NumPulls)
-		assert.Equal(t, initialNumClosedPulls+2, repo.NumClosedPulls)
-
-		// Reopen both
-		for i := 1; i <= 2; i++ {
+		// Helper to reopen a PR
+		reopenPR := func(i int) {
 			req := NewRequestWithJSON(t, "PATCH",
 				fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", user2.Name, repoName, i),
 				&api.EditPullRequestOption{State: ptrString("open")}).AddTokenAuth(token)
 			MakeRequest(t, req, http.StatusCreated)
 		}
 
-		// Verify counters decreased
+		// Create 4 PRs
+		for i := 1; i <= 4; i++ {
+			createPR(i)
+		}
+
+		// Verify all 4 PRs created and open
+		repo, err := repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, initialNumPulls+4, repo.NumPulls, "Should have 4 PRs")
+		assert.Equal(t, initialNumClosedPulls, repo.NumClosedPulls, "No PRs closed yet")
+
+		// Close PRs 1, 2, 3 (but not 4)
+		closePR(1)
+		closePR(2)
+		closePR(3)
+
 		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
 		assert.NoError(t, err)
-		assert.Equal(t, initialNumPulls+2, repo.NumPulls, "Total should remain +2")
-		assert.Equal(t, initialNumClosedPulls, repo.NumClosedPulls,
-			"Closed count should return to initial after reopening both")
+		assert.Equal(t, initialNumClosedPulls+3, repo.NumClosedPulls, "3 PRs should be closed")
+
+		// Reopen PR 1
+		reopenPR(1)
+
+		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, initialNumClosedPulls+2, repo.NumClosedPulls, "2 PRs should be closed after reopening 1")
+
+		// Close PR 1 again
+		closePR(1)
+
+		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, initialNumClosedPulls+3, repo.NumClosedPulls, "3 PRs closed again")
+
+		// Reopen all closed PRs (1, 2, 3)
+		reopenPR(1)
+		reopenPR(2)
+		reopenPR(3)
+
+		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, initialNumClosedPulls, repo.NumClosedPulls, "All PRs should be open now")
+
+		// Close PR 4 (first time for this one)
+		closePR(4)
+
+		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, initialNumClosedPulls+1, repo.NumClosedPulls, "Only PR 4 should be closed")
+
+		// Rapid close/reopen cycles to stress the counter logic
+		for cycle := 0; cycle < 3; cycle++ {
+			closePR(1)
+			closePR(2)
+			repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+			assert.NoError(t, err)
+			assert.Equal(t, initialNumClosedPulls+3, repo.NumClosedPulls,
+				"After closing 1,2 in cycle %d: expected 3 closed (1,2,4)", cycle)
+
+			reopenPR(1)
+			reopenPR(2)
+			repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+			assert.NoError(t, err)
+			assert.Equal(t, initialNumClosedPulls+1, repo.NumClosedPulls,
+				"After reopening 1,2 in cycle %d: expected 1 closed (4)", cycle)
+		}
+
+		// Final state verification
+		repo, err = repo_model.GetRepositoryByID(context.TODO(), repo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, initialNumPulls+4, repo.NumPulls, "Final: should have 4 total PRs")
+		assert.Equal(t, initialNumClosedPulls+1, repo.NumClosedPulls, "Final: only PR 4 should be closed")
 	})
 }
 
