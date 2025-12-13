@@ -22,34 +22,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTeamMemberCanAccessRepo tests that users in a team with repo access
-// can actually access the repository through API operations.
+// TestTeamMemberInBranchProtectionWhitelist tests that team members appear in
+// branch protection user whitelists when they have access via team membership.
 //
-// Bug (before fix): Team members could not access organization repositories
-// they had team-based access to, because the access check only looked at
-// direct user collaborations, not team memberships.
+// Bug (before fix): Users with team-based access to a repo didn't show up in
+// the branch protection user dropdown/search. When retrieving branch protection
+// via API, team members' usernames were missing from PushWhitelistUsernames
+// even if their IDs were in the whitelist.
 //
-// Fix: The access checking logic was updated to include team members when
-// checking repository permissions for organization-owned repositories.
-func TestTeamMemberCanAccessRepo(t *testing.T) {
+// This was because GetRepoReaders() only looked at the 'access' table for direct
+// collaborators and didn't include team members for organization-owned repos.
+//
+// Fix: GetUsersWithUnitAccess() now includes team members by calling
+// GetTeamUserIDsWithAccessToAnyRepoUnit() for organization-owned repositories.
+//
+// Related issue: https://github.com/go-gitea/gitea/issues/35499
+func TestTeamMemberInBranchProtectionWhitelist(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, u *url.URL) {
-		// Create organization owner (user 2)
+		// Create organization owner (user 2 - has valid password hash)
 		orgOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 		session := loginUser(t, orgOwner.Name)
-		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteOrganization, auth_model.AccessTokenScopeWriteRepository)
+		token := getTokenForLoggedInUser(t, session,
+			auth_model.AccessTokenScopeWriteOrganization,
+			auth_model.AccessTokenScopeWriteRepository)
 
 		// Create a test user who will be added to team
-		// Copy from user2 (which has a valid password hash for "password") and modify
-		teamMemberUsername := "teammember"
+		// Copy from user2 (which has a valid password hash for "password")
+		teamMemberUsername := "teammember_bp"
 		teamMember := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 		teamMember.Name = teamMemberUsername
 		teamMember.LowerName = strings.ToLower(teamMemberUsername)
-		teamMember.Email = "teammember@example.com"
+		teamMember.Email = "teammember_bp@example.com"
 		teamMember.ID = 0
 		require.NoError(t, db.Insert(t.Context(), teamMember))
 
+		// Reload to get the assigned ID
+		teamMember = unittest.AssertExistsAndLoadBean(t, &user_model.User{LowerName: strings.ToLower(teamMemberUsername)})
+
 		// Create organization
-		orgName := "testorg-team-access"
+		orgName := "testorg-bp-whitelist"
 		orgOpts := api.CreateOrgOption{
 			UserName: orgName,
 		}
@@ -58,8 +69,8 @@ func TestTeamMemberCanAccessRepo(t *testing.T) {
 
 		org := unittest.AssertExistsAndLoadBean(t, &org_model.Organization{Name: orgName})
 
-		// Create team with write permissions
-		teamName := "developers"
+		// Create team with write permissions (needed to be in push whitelist)
+		teamName := "writers"
 		teamOpts := api.CreateTeamOption{
 			Name:       teamName,
 			Permission: "write",
@@ -76,7 +87,7 @@ func TestTeamMemberCanAccessRepo(t *testing.T) {
 		MakeRequest(t, req, http.StatusNoContent)
 
 		// Create private repository in organization
-		repoName := "team-access-test-repo"
+		repoName := "bp-whitelist-repo"
 		repoOpts := api.CreateRepoOption{
 			Name:     repoName,
 			Private:  true,
@@ -91,97 +102,40 @@ func TestTeamMemberCanAccessRepo(t *testing.T) {
 		req = NewRequest(t, "PUT", fmt.Sprintf("/api/v1/teams/%d/repos/%s/%s", team.ID, orgName, repoName)).AddTokenAuth(token)
 		MakeRequest(t, req, http.StatusNoContent)
 
-		// Login as team member and try to access the repo
-		teamMemberSession := loginUser(t, teamMemberUsername)
-		teamMemberToken := getTokenForLoggedInUser(t, teamMemberSession, auth_model.AccessTokenScopeWriteRepository)
-
-		// KEY TEST: Team member tries to get repo info via API
-		// On baseline (bug): 404 Not Found (team member denied access)
-		// On golden (fix): 200 OK (team member has access via team)
-		req = NewRequest(t, "GET", fmt.Sprintf("/api/v1/repos/%s/%s", orgName, repoName)).AddTokenAuth(teamMemberToken)
-		resp = teamMemberSession.MakeRequest(t, req, http.StatusOK)
-
-		var repoInfo api.Repository
-		DecodeJSON(t, resp, &repoInfo)
-		assert.Equal(t, repo.Name, repoInfo.Name, "Team member should be able to read repo info")
-
-		// Additional test: team member can write to the repo
-		fileOpts := api.CreateFileOptions{
-			FileOptions: api.FileOptions{
-				BranchName: repo.DefaultBranch,
-				Message:    "Test commit by team member",
-			},
-			ContentBase64: "dGVzdCBjb250ZW50", // "test content" base64
+		// Create branch protection rule with the team member in push whitelist
+		// We use the team member's username in push_whitelist_usernames
+		bpOpts := api.BranchProtection{
+			RuleName:              repo.DefaultBranch,
+			EnablePush:            true,
+			EnablePushWhitelist:   true,
+			PushWhitelistUsernames: []string{teamMemberUsername},
 		}
 		req = NewRequestWithJSON(t, "POST",
-			fmt.Sprintf("/api/v1/repos/%s/%s/contents/test-team-access.txt", orgName, repoName),
-			&fileOpts).AddTokenAuth(teamMemberToken)
+			fmt.Sprintf("/api/v1/repos/%s/%s/branch_protections", orgName, repoName),
+			&bpOpts).AddTokenAuth(token)
+		resp = MakeRequest(t, req, http.StatusCreated)
 
-		// On baseline (bug): 403 or 404 (access denied)
-		// On golden (fix): 201 Created (access granted via team)
-		teamMemberSession.MakeRequest(t, req, http.StatusCreated)
+		var createdBP api.BranchProtection
+		DecodeJSON(t, resp, &createdBP)
+
+		// Now GET the branch protection and check if the team member appears
+		// in PushWhitelistUsernames
+		req = NewRequest(t, "GET",
+			fmt.Sprintf("/api/v1/repos/%s/%s/branch_protections/%s", orgName, repoName, repo.DefaultBranch)).AddTokenAuth(token)
+		resp = MakeRequest(t, req, http.StatusOK)
+
+		var fetchedBP api.BranchProtection
+		DecodeJSON(t, resp, &fetchedBP)
+
+		// KEY ASSERTION:
+		// On baseline (bug): PushWhitelistUsernames will be empty or not contain
+		// the team member, because GetRepoReaders() didn't include team members
+		// On golden (fix): PushWhitelistUsernames will contain the team member
+		assert.Contains(t, fetchedBP.PushWhitelistUsernames, teamMemberUsername,
+			"Team member should appear in PushWhitelistUsernames. "+
+				"Bug: GetRepoReaders() didn't include team members for org repos. "+
+				"If this fails, the team member was added to whitelist but their "+
+				"username doesn't appear in the API response because they're not "+
+				"found in the 'readers' list used by ToBranchProtection().")
 	})
-}
-
-// TestDirectCollaboratorStillWorks ensures that direct collaborator access
-// still works after the team access fix (regression test).
-func TestDirectCollaboratorStillWorks(t *testing.T) {
-	onGiteaRun(t, func(t *testing.T, u *url.URL) {
-		orgOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-		session := loginUser(t, orgOwner.Name)
-		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteOrganization, auth_model.AccessTokenScopeWriteRepository)
-
-		// Create user with direct access
-		// Copy from user2 (which has a valid password hash for "password") and modify
-		directUsername := "directuser"
-		directUser := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-		directUser.Name = directUsername
-		directUser.LowerName = strings.ToLower(directUsername)
-		directUser.Email = "direct@example.com"
-		directUser.ID = 0
-		require.NoError(t, db.Insert(t.Context(), directUser))
-
-		// Create organization and private repo
-		orgName := "testorg-direct"
-		orgOpts := api.CreateOrgOption{UserName: orgName}
-		req := NewRequestWithJSON(t, "POST", "/api/v1/orgs", &orgOpts).AddTokenAuth(token)
-		MakeRequest(t, req, http.StatusCreated)
-
-		org := unittest.AssertExistsAndLoadBean(t, &org_model.Organization{Name: orgName})
-
-		repoName := "direct-access-repo"
-		repoOpts := api.CreateRepoOption{
-			Name:     repoName,
-			Private:  true,
-			AutoInit: true,
-		}
-		req = NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/v1/orgs/%s/repos", orgName), &repoOpts).AddTokenAuth(token)
-		MakeRequest(t, req, http.StatusCreated)
-
-		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: org.ID, Name: repoName})
-
-		// Add direct collaborator with write access
-		collabOpts := api.AddCollaboratorOption{Permission: ptrString("write")}
-		req = NewRequestWithJSON(t, "PUT",
-			fmt.Sprintf("/api/v1/repos/%s/%s/collaborators/%s", orgName, repoName, directUsername),
-			&collabOpts).AddTokenAuth(token)
-		MakeRequest(t, req, http.StatusNoContent)
-
-		// Login as direct collaborator
-		directSession := loginUser(t, directUsername)
-		directToken := getTokenForLoggedInUser(t, directSession, auth_model.AccessTokenScopeWriteRepository)
-
-		// Direct collaborator should be able to access the repo
-		req = NewRequest(t, "GET", fmt.Sprintf("/api/v1/repos/%s/%s", orgName, repoName)).AddTokenAuth(directToken)
-		resp := directSession.MakeRequest(t, req, http.StatusOK)
-
-		var repoInfo api.Repository
-		DecodeJSON(t, resp, &repoInfo)
-		assert.Equal(t, repo.Name, repoInfo.Name, "Direct collaborator should be able to read repo info")
-	})
-}
-
-// ptrString returns a pointer to the given string.
-func ptrString(s string) *string {
-	return &s
 }
