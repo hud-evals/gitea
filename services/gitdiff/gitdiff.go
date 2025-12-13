@@ -158,9 +158,21 @@ func (d *DiffLine) getBlobExcerptQuery() string {
 	return query
 }
 
-// TODO: Implement logic to determine expand direction
+// GetExpandDirection returns the direction for expanding a diff section.
+// Returns "up" for file head, "down" for file tail, "updown" for large gaps,
+// "single" for small gaps, or "" if no expansion is needed.
 func (d *DiffLine) GetExpandDirection() string {
-	return ""
+	if d.Type != DiffLineSection || d.SectionInfo == nil || d.SectionInfo.LeftIdx-d.SectionInfo.LastLeftIdx <= 1 || d.SectionInfo.RightIdx-d.SectionInfo.LastRightIdx <= 1 {
+		return ""
+	}
+	if d.SectionInfo.LastLeftIdx <= 0 && d.SectionInfo.LastRightIdx <= 0 {
+		return "up"
+	} else if d.SectionInfo.RightIdx-d.SectionInfo.LastRightIdx > BlobExcerptChunkSize && d.SectionInfo.RightHunkSize > 0 {
+		return "updown"
+	} else if d.SectionInfo.LeftHunkSize <= 0 && d.SectionInfo.RightHunkSize <= 0 {
+		return "down"
+	}
+	return "single"
 }
 
 type DiffBlobExcerptData struct {
