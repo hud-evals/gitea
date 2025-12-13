@@ -158,19 +158,9 @@ func (d *DiffLine) getBlobExcerptQuery() string {
 	return query
 }
 
-// TODO: Fix off-by-one error in expansion direction calculation
+// TODO: Implement logic to determine expand direction
 func (d *DiffLine) GetExpandDirection() string {
-	if d.Type != DiffLineSection || d.SectionInfo == nil || d.SectionInfo.LeftIdx-d.SectionInfo.LastLeftIdx <= 1 || d.SectionInfo.RightIdx-d.SectionInfo.LastRightIdx <= 1 {
-		return ""
-	}
-	if d.SectionInfo.LastLeftIdx <= 0 && d.SectionInfo.LastRightIdx <= 0 {
-		return "up"
-	} else if d.SectionInfo.RightIdx-d.SectionInfo.LastRightIdx > BlobExcerptChunkSize && d.SectionInfo.RightHunkSize > 0 {
-		return "updown"
-	} else if d.SectionInfo.LeftHunkSize <= 0 && d.SectionInfo.RightHunkSize <= 0 {
-		return "down"
-	}
-	return "single"
+	return ""
 }
 
 type DiffBlobExcerptData struct {
