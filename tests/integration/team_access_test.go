@@ -15,6 +15,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/optional"
 	api "code.gitea.io/gitea/modules/structs"
 
 	"github.com/stretchr/testify/assert"
@@ -45,7 +46,10 @@ func TestTeamMemberCanAccessRepo(t *testing.T) {
 			IsActive: true,
 		}
 		assert.NoError(t, teamMember.SetPassword("password"))
-		assert.NoError(t, user_model.CreateUser(context.Background(), teamMember, nil))
+		assert.NoError(t, user_model.CreateUser(context.Background(), teamMember, nil,
+			&user_model.CreateUserOverwriteOptions{
+				IsActive: optional.Some(true),
+			}))
 
 		// Create organization
 		orgName := "testorg-team-access"
@@ -62,6 +66,7 @@ func TestTeamMemberCanAccessRepo(t *testing.T) {
 		teamOpts := api.CreateTeamOption{
 			Name:       teamName,
 			Permission: "write",
+			Units:      []string{"repo.code", "repo.issues", "repo.pulls"},
 		}
 		req = NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/v1/orgs/%s/teams", orgName), &teamOpts).AddTokenAuth(token)
 		resp := MakeRequest(t, req, http.StatusCreated)
@@ -137,7 +142,10 @@ func TestDirectCollaboratorStillWorks(t *testing.T) {
 			IsActive: true,
 		}
 		assert.NoError(t, directUser.SetPassword("password"))
-		assert.NoError(t, user_model.CreateUser(context.Background(), directUser, nil))
+		assert.NoError(t, user_model.CreateUser(context.Background(), directUser, nil,
+			&user_model.CreateUserOverwriteOptions{
+				IsActive: optional.Some(true),
+			}))
 
 		// Create organization and private repo
 		orgName := "testorg-direct"
