@@ -52,11 +52,11 @@ func TestTagPushDoesNotBypassBranchFilter(t *testing.T) {
 	assert.NoError(t, PrepareWebhooks(t.Context(), EventSource{Repository: repo}, webhook_module.HookEventPush, tagPushPayload))
 
 	// On BASELINE (bug): Hook task WOULD be created because tag push returned
-	// empty branch name, which bypassed the filter check entirely
+	// empty branch name, which bypassed the filter check entirely.
 	// On GOLDEN (fix): Hook task should NOT be created because tag refs don't
-	// match branch filter patterns like "master" or "feature*"
-	unittest.AssertNotExistsBean(t, hookTask,
-		"Tag push to 'refs/tags/v1.0.0' should NOT trigger webhook with branch filter "+
-			"'{master,feature*}' - tags must respect branch filters and not bypass them")
+	// match branch filter patterns like "master" or "feature*".
+	// Tag push to 'refs/tags/v1.0.0' should NOT trigger webhook with branch filter
+	// '{master,feature*}' - tags must respect branch filters and not bypass them.
+	unittest.AssertNotExistsBean(t, hookTask)
 }
 
