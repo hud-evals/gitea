@@ -106,7 +106,7 @@
     "stylelint-declaration-block-no-ignored-properties": "2.8.0",
     "stylelint-declaration-strict-value": "1.10.11",
     "stylelint-value-no-unknown-custom-properties": "6.0.1",
-    "svgo": "4.0.0",
+    "svgo": "4.0.1",
     "typescript-eslint": "8.48.0",
     "updates": "16.9.2",
     "vite-string-plugin": "1.4.9",
